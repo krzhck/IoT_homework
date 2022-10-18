@@ -96,13 +96,13 @@ if __name__ == '__main__':
     print(seq)
     plt.subplot(211)
     plt.plot(seq, 'r')
-    plt.title("Before pulse encode")
+    plt.title("original signal")
     sig=modulate(seq, file_path)
     ans = demodulate(file_path)
     #print(ans)
     plt.subplot(212)
     plt.plot(ans, 'r')
-    plt.title("After pulse decode")
+    plt.title("decoded signal")
     plt.show()
 
     SNR = [20, 10, 0]
@@ -112,7 +112,7 @@ if __name__ == '__main__':
         ans = demodulate(awgn_file)
         #print(ans)
         diff = [1 if seq[j] == ans[j] else 0 for j in range(len(seq))]
-        labels = ["Same", "Different"]
+        labels = ["right", "wrong"]
         X = [np.sum(diff), len(seq) - np.sum(diff)]
         
         plt.subplot(2, 2, int((i/10)+1))
