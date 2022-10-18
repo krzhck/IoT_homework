@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal as signal
 
-
 def open_wave_file(name):
     f = wave.open(name, "rb")
     params = f.getparams()
@@ -13,7 +12,13 @@ def open_wave_file(name):
     sig = np.frombuffer(str_sig, dtype=np.short)
     return sig, framerate
 
-def encode_pulse(codes, filename):
+def awgn(y, snr):
+    snr = 10 ** (snr / 10.0)
+    xpower = np.sum(y ** 2) / len(y)
+    npower = xpower / snr
+    return np.random.randn(len(y)) * np.sqrt(npower) + y
+
+def modulate(codes, filename):
     fs = 48000
     f = 20000
     time = 0.001
@@ -23,11 +28,9 @@ def encode_pulse(codes, filename):
     pause0 = np.zeros(delta)
     pause1 = np.zeros(2 * delta)
     output = np.concatenate([np.zeros(3 * delta),impulse])
-    for i in range(len(codes)):
-		# use pause0 as interval if original code is 0
-        if codes[i] == 0:
+    for i in codes:
+        if i == 0:
             output = np.concatenate([output, pause0, impulse])
-		# use pause1 as interval if original code is 1
         else:
             output = np.concatenate([output, pause1, impulse])
     output = np.concatenate([output, impulse])
@@ -39,13 +42,21 @@ def encode_pulse(codes, filename):
     file.writeframes(sig)
     return sig
 
+def modulate_with_awgn(codes, filename, snr):
+    sig = modulate(codes, filename)
+    sig = awgn(sig, snr)
+    file = wave.open(filename, mode='wb')
+    file.setframerate(48000)
+    file.setnchannels(1)
+    file.setsampwidth(2)
+    file.writeframes(sig)
+    return sig
 
-def decode_pulse(filename):
+
+def demodulate(filename):
     sig, sample_freq = open_wave_file(filename)
-    base_freq = 20e3
-	# bandpass [0.95*base_freq,1.05*base_freq]
-    [b, a] = signal.ellip(5, 0.5, 60, (base_freq * 1.95 / sample_freq, base_freq * 2.05 / sample_freq),
-                          btype='bandpass', analog=False, output='ba')
+    base_freq = 20000
+    b, a = signal.butter(8, [base_freq * 1.95 / sample_freq, base_freq * 2.05 / sample_freq], 'bandpass')
     sig = signal.filtfilt(b, a, sig)
     n = len(sig)
     window = 100
@@ -74,9 +85,11 @@ def decode_pulse(filename):
 if __name__ == '__main__':
     input_seq = input('输入01序列：')
     file_name = ''
+    out_dict = '../wav/'
+    wav_suffix = '.wav'
     while len(file_name) == 0:
         file_name = input('另存为 (.wav)：')
-    file_name = file_name + '.wav'
+    file_path = out_dict + file_name + wav_suffix
     seq = []
     for d in input_seq:
         seq.append(int(d))
@@ -84,9 +97,25 @@ if __name__ == '__main__':
     plt.subplot(211)
     plt.plot(seq, 'r')
     plt.title("Before pulse encode")
-    sig=encode_pulse(seq, file_name)
-    ans = decode_pulse(file_name)
+    sig=modulate(seq, file_path)
+    ans = demodulate(file_path)
+    #print(ans)
     plt.subplot(212)
     plt.plot(ans, 'r')
     plt.title("After pulse decode")
+    plt.show()
+
+    SNR = [20, 10, 0]
+    for i in SNR:
+        awgn_file = out_dict + str(i) + file_name + wav_suffix
+        modulate_with_awgn(seq, awgn_file, i)
+        ans = demodulate(awgn_file)
+        #print(ans)
+        diff = [1 if seq[j] == ans[j] else 0 for j in range(len(seq))]
+        labels = ["Same", "Different"]
+        X = [np.sum(diff), len(seq) - np.sum(diff)]
+        
+        plt.subplot(2, 2, int((i/10)+1))
+        plt.pie(X, labels=labels, autopct='%1.2f%%')
+        plt.title("SNR = " + str(i))
     plt.show()
